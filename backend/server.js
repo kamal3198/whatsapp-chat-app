@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
@@ -20,7 +21,7 @@ app.use("/messages", messageRoutes);
 
 // ----- MongoDB -----
 mongoose
-  .connect("mongodb://127.0.0.1:27017/whatsapp_clone")
+  .connect(process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/whatsapp_clone")
   .then(() => console.log("MongoDB Connected"))
   .catch((err) => console.log(err));
 
@@ -140,6 +141,7 @@ io.on("connection", (socket) => {
   });
 });
 
-http.listen(5000, () => {
-  console.log("🚀 Server running on http://localhost:5000");
+const PORT = process.env.PORT || 5000;
+http.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
