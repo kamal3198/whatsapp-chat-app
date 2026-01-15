@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 import axios from "axios";
 import { jwtDecode } from "jwt-decode";
+import "emoji-picker-element";
 
 export default function Chat() {
   // ----- STATE -----
@@ -12,6 +13,7 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [userTyping, setUserTyping] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   // ----- SOCKET REF -----
   const socketRef = useRef(null);
@@ -239,6 +241,32 @@ export default function Chat() {
     navigate("/login");
   };
 
+  // ----- EMOJI PICKER -----
+  const toggleEmojiPicker = () => {
+    setShowEmojiPicker(!showEmojiPicker);
+  };
+
+  const handleEmojiSelect = (event) => {
+    const emoji = event.detail.unicode;
+    setText(prev => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
+  useEffect(() => {
+    if (showEmojiPicker) {
+      // Small delay to ensure the emoji picker is rendered
+      const timeoutId = setTimeout(() => {
+        const picker = document.querySelector('emoji-picker');
+        if (picker) {
+          picker.addEventListener('emoji-click', handleEmojiSelect);
+          return () => picker.removeEventListener('emoji-click', handleEmojiSelect);
+        }
+      }, 100);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [showEmojiPicker]);
+
   // ----- SCROLL TO BOTTOM -----
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -354,6 +382,9 @@ export default function Chat() {
         </div>
 
         <div className="chat-input">
+          <button className="emoji-button" onClick={toggleEmojiPicker} disabled={!activeUser}>
+            😀
+          </button>
           <input
             value={text}
             onChange={(e) => {
@@ -367,6 +398,11 @@ export default function Chat() {
           <button onClick={handleSend} disabled={!activeUser || !text.trim()}>
             Send
           </button>
+          {showEmojiPicker && (
+            <div className="emoji-picker">
+              <emoji-picker></emoji-picker>
+            </div>
+          )}
         </div>
       </div>
     </div>
