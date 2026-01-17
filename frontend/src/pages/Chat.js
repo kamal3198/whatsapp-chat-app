@@ -99,16 +99,22 @@ export default function Chat() {
 
     const handler = (data) => {
       const { senderId, receiverId, text, timestamp, status } = data;
-      const newMessage = {
-        _id: data._id,
-        sender: senderId,
-        receiver: receiverId,
-        text,
-        timestamp,
-        status
-      };
 
-      setMessages(prev => [...prev, newMessage]);
+      // Only add to messages if it belongs to the active chat
+      if (activeUser && (senderId === activeUser._id || receiverId === activeUser._id)) {
+        const newMessage = {
+          _id: data._id,
+          sender: senderId,
+          receiver: receiverId,
+          text,
+          fileUrl: data.fileUrl,
+          fileName: data.fileName,
+          fileType: data.fileType,
+          timestamp,
+          status
+        };
+        setMessages(prev => [...prev, newMessage]);
+      }
 
       // If message is for current chat, mark as read
       if (activeUser && senderId === activeUser._id) {
@@ -208,6 +214,50 @@ export default function Chat() {
     socketRef.current.emit("sendMessage", messageData);
 
     setText("");
+    setShowEmojiPicker(false);
+  };
+
+  // ----- FILE UPLOAD -----
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !activeUser || !token) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("receiverId", activeUser._id);
+    formData.append("text", `Sent a file: ${file.name}`);
+
+    try {
+      const res = await axios.post("http://localhost:5000/messages/upload", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const newMessage = res.data;
+      // Add real ID sender/receiver mapping for consistency
+      const formattedMsg = {
+        ...newMessage,
+        sender: newMessage.sender._id || newMessage.sender,
+        receiver: newMessage.receiver._id || newMessage.receiver
+      };
+      
+      setMessages((prev) => [...prev, formattedMsg]);
+
+      // Notify recipient via socket
+      socketRef.current.emit("sendMessage", {
+        senderId: user.id,
+        receiverId: activeUser._id,
+        text: formattedMsg.text,
+        fileUrl: formattedMsg.fileUrl,
+        fileName: formattedMsg.fileName,
+        fileType: formattedMsg.fileType,
+      });
+    } catch (err) {
+      console.log("File upload error:", err);
+      alert("Failed to upload file");
+    }
   };
 
   // ----- TYPING INDICATOR -----
@@ -288,14 +338,14 @@ export default function Chat() {
       {/* ----- SIDEBAR ----- */}
       <div className="chat-sidebar">
         <div className="sidebar-header">
-          Chats
+          <div className="sidebar-header-title">Chats</div>
           <button onClick={handleLogout} style={{
-            float: "right",
             background: "none",
             border: "none",
-            color: "#666",
+            color: "#54656f",
             cursor: "pointer",
-            fontSize: "14px"
+            fontSize: "14px",
+            fontWeight: "500"
           }}>Logout</button>
         </div>
 
@@ -308,17 +358,15 @@ export default function Chat() {
                 className={`user-item ${activeUser?._id === u._id ? "active" : ""}`}
                 onClick={() => handleUserSelect(u)}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span>{u.username}</span>
-                  <span style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: u.online ? "#4CAF50" : "#ccc"
-                  }}></span>
+                <div className="user-main-info">
+                  <span className="user-name">{u.username}</span>
+                  <span 
+                    className="online-indicator"
+                    style={{ background: u.online ? "#1fa855" : "#aebac1" }}
+                  ></span>
                 </div>
                 {!u.online && u.lastSeen && (
-                  <small style={{ color: "#666", fontSize: "12px" }}>
+                  <small style={{ color: "#667781", fontSize: "12px" }}>
                     Last seen {new Date(u.lastSeen).toLocaleDateString()}
                   </small>
                 )}
@@ -331,38 +379,51 @@ export default function Chat() {
       <div className="chat-window">
         <div className="chat-header">
           {activeUser ? (
-            <div>
-              {activeUser.username}
-              {activeUser.online ? (
-                <span style={{ color: "#4CAF50", marginLeft: 10 }}>Online</span>
-              ) : (
-                <span style={{ color: "#666", marginLeft: 10 }}>
-                  Last seen {activeUser.lastSeen ? new Date(activeUser.lastSeen).toLocaleString() : "never"}
-                </span>
-              )}
+            <div className="chat-header-info">
+              <div className="chat-header-name">{activeUser.username}</div>
+              <div className="chat-header-status">
+                {activeUser.online ? "online" : 
+                  `last seen ${activeUser.lastSeen ? new Date(activeUser.lastSeen).toLocaleString() : "never"}`}
+              </div>
             </div>
-          ) : "Select a user"}
+          ) : <div className="chat-header-name">Select a user</div>}
         </div>
 
         <div className="chat-messages">
           {activeUser ? (
             messages.length > 0 ? (
-              messages.map((msg) => (
-                <div
-                  key={msg._id}
-                  className={`message ${msg.sender === user.id ? "sent" : "received"}`}
-                >
-                  <div>{msg.text}</div>
-                  <small style={{ fontSize: "11px", opacity: 0.7, marginTop: 2 }}>
-                    {formatTime(msg.timestamp)}
-                    {msg.sender === user.id && (
-                      <span style={{ marginLeft: 5 }}>
-                        {msg.status === "read" ? "✓✓" : msg.status === "delivered" ? "✓" : ""}
-                      </span>
-                    )}
-                  </small>
-                </div>
-              ))
+      messages.map((msg) => {
+                const senderId = msg.sender?._id || msg.sender;
+                const isMe = String(senderId) === String(user.id);
+                return (
+                  <div
+                    key={msg._id}
+                    className={`message ${isMe ? "sent" : "received"}`}
+                  >
+                    <div className="message-content">
+                      {msg.fileUrl ? (
+                        <a href={`http://localhost:5000${msg.fileUrl}`} target="_blank" rel="noreferrer" className="file-message">
+                          <div className="file-info">
+                            <span className="file-icon">📄</span>
+                            <span>{msg.fileName || "File"}</span>
+                          </div>
+                          {msg.text && <div style={{marginTop: 8}}>{msg.text}</div>}
+                        </a>
+                      ) : (
+                        msg.text
+                      )}
+                    </div>
+                    <div className="message-info">
+                      <span>{formatTime(msg.timestamp)}</span>
+                      {isMe && (
+                        <span style={{ color: msg.status === "read" ? "#53bdeb" : "inherit" }}>
+                          {msg.status === "read" ? "✓✓" : msg.status === "delivered" ? "✓✓" : "✓"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             ) : (
               <div style={{ padding: 20, opacity: 0.5, textAlign: "center" }}>
                 No messages yet. Say Hi 👋
@@ -385,6 +446,10 @@ export default function Chat() {
           <button className="emoji-button" onClick={toggleEmojiPicker} disabled={!activeUser}>
             😀
           </button>
+          <label className="file-button">
+            📎
+            <input type="file" style={{ display: "none" }} onChange={handleFileChange} disabled={!activeUser} />
+          </label>
           <input
             value={text}
             onChange={(e) => {
@@ -395,11 +460,11 @@ export default function Chat() {
             disabled={!activeUser}
             placeholder={activeUser ? "Type a message..." : "Select a chat first"}
           />
-          <button onClick={handleSend} disabled={!activeUser || !text.trim()}>
-            Send
+          <button className="send-button" onClick={handleSend} disabled={!activeUser || !text.trim()}>
+            <svg viewBox="0 0 24 24" height="24" width="24" preserveAspectRatio="xMidYMid meet" fill="currentColor"><path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"></path></svg>
           </button>
           {showEmojiPicker && (
-            <div className="emoji-picker">
+            <div className="emoji-picker-container">
               <emoji-picker></emoji-picker>
             </div>
           )}

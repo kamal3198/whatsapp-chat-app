@@ -7,9 +7,12 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const Message = require("./models/message");
 const User = require("./models/user");
+const path = require("path");
+const fs = require("fs");
 
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -55,8 +58,8 @@ io.on("connection", (socket) => {
   });
 
   // ----- SEND MESSAGE -----
-  socket.on("sendMessage", async ({ senderId, receiverId, text }) => {
-    if (!senderId || !receiverId || !text) {
+  socket.on("sendMessage", async ({ senderId, receiverId, text, fileUrl, fileName, fileType }) => {
+    if (!senderId || !receiverId || (!text && !fileUrl)) {
       console.log("❌ Invalid sendMessage payload");
       return;
     }
@@ -66,7 +69,10 @@ io.on("connection", (socket) => {
       const message = await Message.create({
         sender: senderId,
         receiver: receiverId,
-        text,
+        text: text || "",
+        fileUrl: fileUrl || "",
+        fileName: fileName || "",
+        fileType: fileType || "",
       });
 
       const receiverSocket = onlineUsers.get(receiverId);
@@ -79,7 +85,10 @@ io.on("connection", (socket) => {
           _id: message._id,
           senderId,
           receiverId,
-          text,
+          text: message.text,
+          fileUrl: message.fileUrl,
+          fileName: message.fileName,
+          fileType: message.fileType,
           timestamp: message.timestamp,
           status: "delivered"
         });
@@ -92,7 +101,10 @@ io.on("connection", (socket) => {
         _id: message._id,
         senderId,
         receiverId,
-        text,
+        text: message.text,
+        fileUrl: message.fileUrl,
+        fileName: message.fileName,
+        fileType: message.fileType,
         timestamp: message.timestamp,
         status: receiverSocket ? "delivered" : "sent"
       });

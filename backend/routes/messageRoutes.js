@@ -3,6 +3,7 @@ const router = express.Router();
 const Message = require("../models/message");
 const User = require("../models/user");
 const jwt = require("jsonwebtoken");
+const upload = require("../middleware/upload");
 
 // Middleware to verify token
 const verifyToken = (req, res, next) => {
@@ -49,6 +50,33 @@ router.put("/read/:otherUserId", verifyToken, async (req, res) => {
     );
 
     res.json({ message: "Messages marked as read" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Upload file message
+router.post("/upload", verifyToken, upload.single("file"), async (req, res) => {
+  try {
+    const { receiverId } = req.body;
+    const senderId = req.userId;
+
+    if (!req.file || !receiverId) {
+      return res.status(400).json({ error: "File and receiver are required" });
+    }
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+
+    const message = await Message.create({
+      sender: senderId,
+      receiver: receiverId,
+      text: req.body.text || "",
+      fileUrl,
+      fileName: req.file.originalname,
+      fileType: req.file.mimetype,
+    });
+
+    res.json(message);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
