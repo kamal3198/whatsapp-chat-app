@@ -6,6 +6,8 @@ import axios from "axios";
 import { jwtDecode } from "jwt-decode";
 import "emoji-picker-element";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
+
 export default function Chat() {
   // ----- STATE -----
   const [users, setUsers] = useState([]);
@@ -29,7 +31,7 @@ export default function Chat() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await axios.get("http://localhost:5000/users", {
+        const res = await axios.get(`${API_URL}/users`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         setUsers(res.data);
@@ -43,7 +45,7 @@ export default function Chat() {
 
   // ----- INIT SOCKET -----
   useEffect(() => {
-    const socket = io("http://localhost:5000", {
+    const socket = io(API_URL, {
       transports: ["websocket"],
     });
 
@@ -67,7 +69,7 @@ export default function Chat() {
   // ----- LOAD MESSAGES -----
   const loadMessages = async (otherUserId) => {
     try {
-      const res = await axios.get(`http://localhost:5000/messages/${otherUserId}`, {
+      const res = await axios.get(`${API_URL}/messages/${otherUserId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setMessages(res.data);
@@ -77,17 +79,17 @@ export default function Chat() {
   };
 
   // ----- SELECT USER -----
-  const handleUserSelect = async (user) => {
-    setActiveUser(user);
+  const handleUserSelect = async (otherUser) => {
+    setActiveUser(otherUser);
     setMessages([]);
     setUserTyping(null);
 
-    await loadMessages(user._id);
+    await loadMessages(otherUser._id);
 
-    // Mark messages as read
-    if (socketRef.current) {
+    // Mark messages as read (sender = otherUser, receiver = current user)
+    if (socketRef.current && user?.id) {
       socketRef.current.emit("markAsRead", {
-        senderId: user._id,
+        senderId: otherUser._id,
         receiverId: user.id
       });
     }
@@ -228,7 +230,7 @@ export default function Chat() {
     formData.append("text", `Sent a file: ${file.name}`);
 
     try {
-      const res = await axios.post("http://localhost:5000/messages/upload", formData, {
+      const res = await axios.post(`${API_URL}/messages/upload`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -303,18 +305,19 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    if (showEmojiPicker) {
-      // Small delay to ensure the emoji picker is rendered
-      const timeoutId = setTimeout(() => {
-        const picker = document.querySelector('emoji-picker');
-        if (picker) {
-          picker.addEventListener('emoji-click', handleEmojiSelect);
-          return () => picker.removeEventListener('emoji-click', handleEmojiSelect);
-        }
-      }, 100);
+    if (!showEmojiPicker) return;
 
-      return () => clearTimeout(timeoutId);
-    }
+    // Small delay to ensure the emoji picker is rendered
+    const timeoutId = setTimeout(() => {
+      const picker = document.querySelector('emoji-picker');
+      if (picker) picker.addEventListener('emoji-click', handleEmojiSelect);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      const picker = document.querySelector('emoji-picker');
+      if (picker) picker.removeEventListener('emoji-click', handleEmojiSelect);
+    };
   }, [showEmojiPicker]);
 
   // ----- SCROLL TO BOTTOM -----
@@ -402,7 +405,7 @@ export default function Chat() {
                   >
                     <div className="message-content">
                       {msg.fileUrl ? (
-                        <a href={`http://localhost:5000${msg.fileUrl}`} target="_blank" rel="noreferrer" className="file-message">
+                        <a href={`${API_URL}${msg.fileUrl}`} target="_blank" rel="noreferrer" className="file-message">
                           <div className="file-info">
                             <span className="file-icon">📄</span>
                             <span>{msg.fileName || "File"}</span>

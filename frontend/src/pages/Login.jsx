@@ -19,7 +19,8 @@ export default function Login() {
     setError("");
 
     try {
-      const res = await axios.post("http://localhost:5000/auth/login", { username, password });
+      const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
+      const res = await axios.post(`${API_URL}/auth/login`, { username, password });
       localStorage.setItem("token", res.data.token);
       navigate("/chat");
     } catch (err) {

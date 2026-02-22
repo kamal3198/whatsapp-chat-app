@@ -19,7 +19,8 @@ export default function Signup() {
     setError("");
 
     try {
-      await axios.post("http://localhost:5000/auth/register", { username, password });
+      const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5001";
+      await axios.post(`${API_URL}/auth/register`, { username, password });
       navigate("/login");
     } catch (err) {
       setError(err.response?.data?.error || "Signup failed");
